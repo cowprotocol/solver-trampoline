@@ -1,0 +1,8 @@
+{
+  "name": "hardhat-project",
+  "private": true,
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^2",
+    "hardhat": "^2"
+  }
+}
