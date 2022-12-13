@@ -80,7 +80,44 @@ contract SolverTrampoline {
         bytes32 messageDigest = settlementMessage(settlementDigest, nonce);
         address solver = ecrecover(messageDigest, v, r, s);
 
-        if (solver == address(0) || !solverAuthenticator.isSolver(solver)) {
+        address authenticatorAddress = address(solverAuthenticator);
+        bool isSolver;
+        assembly {
+            // Use scratch space for encoding the call.
+            // See <https://docs.soliditylang.org/en/v0.8.17/internals/layout_in_memory.html>
+            mstore(0, 0x02cc250d00000000000000000000000000000000000000000000000000000000)
+            mstore(4, solver)
+
+            // Use a `STATICCALL` to read whether or not the solver is allowed.
+            // We use assembly for two reasons:
+            // 1. It avoids a `EXTCODESIZE` instruction, as calling a contract
+            //    with no code would make `eq(mload(0), 1)` impossible.
+            // 2. It avoids inefficient code generation around function calls.
+            // 3. Avoids `JUMPI` instruction around checking for call success,
+            //    allowing us to take advantage of the `Unauthorized()` error
+            //    in case the authenticator reverts (which should never happen
+            //    in any of our deployments anyway, so it isn't worth the gas of
+            //    propagating the error).
+            //
+            // We also don't need to check `RETURNDATASIZE` since we wrote
+            // `0x02cc250d...` to memory slot 0, so `isSolver` can only ever
+            // equal 1 if there was some at least 32 bytes of data returned,
+            // and Solidity allows additional calldata to return anyway.
+            isSolver := and(
+                // Unintuitively, this is evaluated **after** the `STATICCALL`.
+                eq(mload(0), 1),
+                staticcall(
+                    gas(),
+                    authenticatorAddress,
+                    0,  // inOffset
+                    36, // inSize
+                    0,  // outOffset
+                    32  // outSize
+                )
+            )
+        }
+
+        if (solver == address(0) || !isSolver) {
             revert Unauthorized();
         }
         if (nonce != nonces[solver]) {
