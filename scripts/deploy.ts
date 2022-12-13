@@ -2,7 +2,7 @@ import { ethers } from "hardhat";
 
 async function main() {
   const SolverTrampoline = await ethers.getContractFactory("SolverTrampoline");
-  const solverTrampoline = await SolverTrampoline.deploy();
+  const solverTrampoline = await SolverTrampoline.deploy(ethers.constants.AddressZero);
 
   await solverTrampoline.deployed();
 
