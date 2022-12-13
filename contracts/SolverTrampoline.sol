@@ -9,10 +9,18 @@ import { Authentication, Settlement } from "./CoWProtocol.sol";
 /// signed authorized settlements. This can be used to allow relayers to execute
 /// settlements on behalf solvers without being a registered solver themselves.
 contract SolverTrampoline {
+    /// @dev The CoW Protocol settlement contract.
+    Settlement public immutable settlementContract;
+    /// @dev the CoW Protocol solver authenticator.
+    Authentication public immutable solverAuthenticator;
+
     /// @dev The domain separator for signing EIP-712 settlements.
     bytes32 public immutable domainSeparator;
 
-    constructor() {
+    constructor(Settlement settlementContract_) {
+        settlementContract = settlementContract_;
+        solverAuthenticator = settlementContract_.authenticator();
+        
         domainSeparator = keccak256(abi.encode(
             keccak256("EIP712Domain(uint256 chainId,address verifyingContract)"),
             block.chainid,
