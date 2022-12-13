@@ -21,4 +21,8 @@ contract TestSettlement is Settlement {
     constructor(address allowedSolver) {
         authenticator = new TestAuthentication(allowedSolver);
     }
+
+    function doSomething(bool shouldRevert) external pure {
+        require(!shouldRevert, "test settlement reverted");
+    }
 }
