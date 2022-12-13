@@ -1,6 +1,9 @@
 {
   "name": "@cowprotocol/solver-trampoline",
   "private": true,
+  "scripts": {
+    "test": "hardhat test"
+  },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^2",
     "hardhat": "^2"
