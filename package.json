@@ -2,6 +2,8 @@
   "name": "@cowprotocol/solver-trampoline",
   "private": true,
   "scripts": {
+    "bench": "hardhat run scripts/bench.ts",
+    "coverage": "hardhat coverage",
     "test": "hardhat test"
   },
   "devDependencies": {
