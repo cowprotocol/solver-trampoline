@@ -41,9 +41,12 @@ async function main() {
   const firstSettlement = await trampolineEmptyTestSettlement();
   await firstSettlement.wait();
 
-  const secondSettlement = await trampolineEmptyTestSettlement();
-  const { gasUsed } = await secondSettlement.wait();
-  console.log(`gas used: ${gasUsed}`);
+  const trampolinedSettlement = await trampolineEmptyTestSettlement();
+  const { gasUsed: trampolineGasUsed } = await trampolinedSettlement.wait();
+
+  const directSettlement = await settlementContract.fallback();
+  const { gasUsed: directGasUsed } = await directSettlement.wait();
+  console.log(`gas used: ${trampolineGasUsed.sub(directGasUsed)}`);
 }
 
 main().catch((error) => {

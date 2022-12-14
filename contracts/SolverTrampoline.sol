@@ -52,13 +52,6 @@ contract SolverTrampoline {
             revert InvalidNonce();
         }
         nonces[solver] = nonce + 1;
-        (bool success, bytes memory data) = address(settlementContract).call(settlement);
-        if (!success) {
-            // Propagate the revert error.
-            assembly {
-                revert(add(data, 32), mload(data))
-            }
-        }
 
         // Use a low-level `call` instead of calling `settle` directly. This is
         // for a couple reasons:

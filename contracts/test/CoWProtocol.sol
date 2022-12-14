@@ -22,7 +22,12 @@ contract TestSettlement is Settlement {
         authenticator = new TestAuthentication(allowedSolver);
     }
 
-    fallback() external {}
+    fallback() external {
+        // Make a call to the authentication contract. This just gives us more
+        // accurate benchmarks as it more accurately captures the "win" we get
+        // by the authentication contract already being warm.
+        authenticator.isSolver(address(0));
+    }
 
     function doSomething(bool shouldRevert) external pure {
         require(!shouldRevert, "test settlement reverted");
