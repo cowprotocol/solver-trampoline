@@ -9,12 +9,6 @@ import { Authentication, Settlement } from "./CoWProtocol.sol";
 /// signed authorized settlements. This can be used to allow relayers to execute
 /// settlements on behalf solvers without being a registered solver themselves.
 contract SolverTrampoline {
-    /// @dev Error indicating that the signer of a settlement is not an
-    /// authorized solver.
-    error Unauthorized(address solver);
-    /// @dev Error that the specified nonce is not valid for the signer.
-    error InvalidNonce();
-
     /// @dev The CoW Protocol settlement contract.
     Settlement public immutable settlementContract;
     /// @dev the CoW Protocol solver authenticator.
@@ -25,6 +19,15 @@ contract SolverTrampoline {
 
     /// @dev Nonce by solver address.
     mapping(address => uint256) public nonces;
+
+    /// @dev An event that is emitted on a trampolined settlement.
+    event TrampolinedSettlement(address indexed solver, uint256 nonce);
+
+    /// @dev Error indicating that the signer of a settlement is not an
+    /// authorized solver.
+    error Unauthorized(address solver);
+    /// @dev Error that the specified nonce is not valid for the signer.
+    error InvalidNonce();
 
     constructor(Settlement settlementContract_) {
         settlementContract = settlementContract_;
@@ -60,11 +63,13 @@ contract SolverTrampoline {
         //   what it is calling (just who signed it).
         (bool success, bytes memory data) = address(settlementContract).call(settlement);
         if (!success) {
-            // Propagate the revert error. 
+            // Propagate the revert error.
             assembly {
                 revert(add(data, 32), mload(data))
             }
         }
+
+        emit TrampolinedSettlement(solver, nonce);
     }
 
     /// @dev Returns the EIP-712 signing digest for the specified settlement

@@ -99,7 +99,8 @@ describe("SolverTrampoline", function () {
       } = await signTestSettlement(solver, nonce);
 
       await expect(solverTrampoline.settle(settlement, nonce, r, s, v))
-        .to.not.be.reverted;
+        .to.emit(solverTrampoline, "TrampolinedSettlement")
+        .withArgs(solver.address, nonce);
       expect(await solverTrampoline.nonces(solver.address))
         .to.equal(nonce.add(1));
     });
