@@ -41,8 +41,8 @@ async function main() {
 
   // Ensure that the solver already has executed a trampolined settlement in
   // order for its nonce to be non-zero.
-  const firstSettlement = await trampolineEmptyTestSettlement();
-  await firstSettlement.wait();
+  const cancelFirstNonce = await solverTrampoline.cancelCurrentNonce();
+  await cancelFirstNonce.wait();
 
   const trampolinedSettlement = await trampolineEmptyTestSettlement();
   const { gasUsed: trampolineGasUsed } = await trampolinedSettlement.wait();
