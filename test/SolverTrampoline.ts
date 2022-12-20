@@ -1,5 +1,6 @@
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { expect } from "chai";
+import { BigNumberish, BytesLike, Signer } from "ethers";
 import { ethers } from "hardhat";
 
 describe("SolverTrampoline", function () {
@@ -26,6 +27,34 @@ describe("SolverTrampoline", function () {
       verifyingContract: solverTrampoline.address,
     };
 
+    async function signTestSettlement(
+      signer: Signer,
+      nonce: BigNumberish,
+      options?: { shouldRevert: boolean },
+    ): Promise<{
+      settlement: BytesLike;
+      r: BytesLike;
+      s: BytesLike;
+      v: BigNumberish;
+    }> {
+      const { shouldRevert } = options ?? { shouldRevert: false };
+      const settlement = TestSettlement.interface.encodeFunctionData(
+        "doSomething",
+        [shouldRevert],
+      );
+      // This function is missing from the signer interface, but it is there...
+      const signature = await (signer as any)._signTypedData(
+        domain,
+        EIP712_TYPES,
+        { settlement, nonce },
+      );
+
+      return {
+        settlement,
+        ...ethers.utils.splitSignature(signature),
+      };
+    }
+
     return {
       solver,
       notSolver,
@@ -33,6 +62,7 @@ describe("SolverTrampoline", function () {
       solverAuthenticator,
       solverTrampoline,
       domain,
+      signTestSettlement,
     };
   }
 
@@ -52,6 +82,85 @@ describe("SolverTrampoline", function () {
         .to.equal(settlementContract.address);
       expect(await solverTrampoline.solverAuthenticator())
         .to.equal(solverAuthenticator.address);
+    });
+  });
+
+  describe("settle", function () {
+    it("Should execute a settlement and increment nonce", async function () {
+      const { solverTrampoline, signTestSettlement, solver } =
+        await loadFixture(fixture);
+
+      const nonce = await solverTrampoline.nonces(solver.address);
+      const {
+        settlement,
+        r,
+        s,
+        v,
+      } = await signTestSettlement(solver, nonce);
+
+      await expect(solverTrampoline.settle(settlement, nonce, r, s, v))
+        .to.not.be.reverted;
+      expect(await solverTrampoline.nonces(solver.address))
+        .to.equal(nonce.add(1));
+    });
+
+    it("Should propagate settlement reverts", async function () {
+      const { solverTrampoline, signTestSettlement, solver } =
+        await loadFixture(fixture);
+
+      const nonce = await solverTrampoline.nonces(solver.address);
+      const {
+        settlement,
+        r,
+        s,
+        v,
+      } = await signTestSettlement(solver, nonce, { shouldRevert: true });
+
+      await expect(solverTrampoline.settle(settlement, nonce, r, s, v))
+        .to.be.revertedWith("test settlement reverted");
+    });
+
+    it("Should deny settlements with invalid signatures", async function () {
+      const { solverTrampoline } = await loadFixture(fixture);
+
+      const { r, s, v } = INVALID_SIGNATURE;
+      await expect(solverTrampoline.settle("0x", 0, r, s, v))
+        .to.be.revertedWithCustomError(solverTrampoline, "Unauthorized")
+        .withArgs(ethers.constants.AddressZero);
+    });
+
+    it("Should deny settlements signed unauthorized solvers", async function () {
+      const { solverTrampoline, signTestSettlement, notSolver } =
+        await loadFixture(fixture);
+
+      const nonce = await solverTrampoline.nonces(notSolver.address);
+      const {
+        settlement,
+        r,
+        s,
+        v,
+      } = await signTestSettlement(notSolver, nonce);
+
+      await expect(solverTrampoline.settle(settlement, nonce, r, s, v))
+        .to.be.revertedWithCustomError(solverTrampoline, "Unauthorized")
+        .withArgs(notSolver.address);
+    });
+
+    it("Should deny settlements with incorrect nonces", async function () {
+      const { solverTrampoline, signTestSettlement, solver } =
+        await loadFixture(fixture);
+
+      const nonce = await solverTrampoline.nonces(solver.address);
+      const wrongNonce = nonce.add(1);
+      const {
+        settlement,
+        r,
+        s,
+        v,
+      } = await signTestSettlement(solver, wrongNonce);
+
+      await expect(solverTrampoline.settle(settlement, wrongNonce, r, s, v))
+        .to.be.revertedWithCustomError(solverTrampoline, "InvalidNonce");
     });
   });
 
@@ -84,4 +193,13 @@ const EIP712_TYPES = {
     { name: "settlement", type: "bytes" },
     { name: "nonce", type: "uint256" },
   ],
+};
+
+// NOTE: According to the yellow paper, a `v` value that is not 27 or 28 is
+// considered to be "incorrect" input and causes the pre-compile to fail, which
+// translates to `ecrecover` returning the 0-address in Solidity.
+const INVALID_SIGNATURE = {
+  r: ethers.constants.HashZero,
+  s: ethers.constants.HashZero,
+  v: 42,
 };
