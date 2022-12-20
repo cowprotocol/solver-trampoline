@@ -125,7 +125,8 @@ describe("SolverTrampoline", function () {
 
       const { r, s, v } = INVALID_SIGNATURE;
       await expect(solverTrampoline.settle("0x", 0, r, s, v))
-        .to.be.reverted;
+        .to.be.revertedWithCustomError(solverTrampoline, "Unauthorized")
+        .withArgs(ethers.constants.AddressZero);
     });
 
     it("Should deny settlements signed unauthorized solvers", async function () {
@@ -141,7 +142,8 @@ describe("SolverTrampoline", function () {
       } = await signTestSettlement(notSolver, nonce);
 
       await expect(solverTrampoline.settle(settlement, nonce, r, s, v))
-        .to.be.reverted;
+        .to.be.revertedWithCustomError(solverTrampoline, "Unauthorized")
+        .withArgs(notSolver.address);
     });
 
     it("Should deny settlements with incorrect nonces", async function () {
@@ -158,7 +160,7 @@ describe("SolverTrampoline", function () {
       } = await signTestSettlement(solver, wrongNonce);
 
       await expect(solverTrampoline.settle(settlement, wrongNonce, r, s, v))
-        .to.be.reverted;
+        .to.be.revertedWithCustomError(solverTrampoline, "InvalidNonce");
     });
   });
 
