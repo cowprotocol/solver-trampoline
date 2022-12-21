@@ -105,6 +105,28 @@ describe("SolverTrampoline", function () {
         .to.equal(nonce.add(1));
     });
 
+    it("Allows executing any settlement contract function", async function () {
+      const {
+        solverTrampoline,
+        domain,
+        solver,
+      } = await loadFixture(fixture);
+
+      // Try an execute any function, like the fallback function.
+      const fallback = "0x";
+
+      const nonce = await solverTrampoline.nonces(solver.address);
+      const signature = await solver._signTypedData(
+        domain,
+        EIP712_TYPES,
+        { settlement: fallback, nonce },
+      );
+
+      const { r, s, v } = ethers.utils.splitSignature(signature);
+      await expect(solverTrampoline.settle(fallback, nonce, r, s, v))
+        .to.not.be.reverted;
+    });
+
     it("Should propagate settlement reverts", async function () {
       const { solverTrampoline, signTestSettlement, solver } =
         await loadFixture(fixture);
