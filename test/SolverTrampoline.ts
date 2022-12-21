@@ -184,7 +184,8 @@ describe("SolverTrampoline", function () {
       } = await signTestSettlement(solver, wrongNonce, deadline);
 
       await expect(solverTrampoline.settle(settlement, wrongNonce, deadline, v, r, s))
-        .to.be.revertedWithCustomError(solverTrampoline, "InvalidNonce");
+        .to.be.revertedWithCustomError(solverTrampoline, "InvalidNonce")
+        .withArgs(wrongNonce, nonce);
     });
 
     it("Should deny expired settlements", async function () {
