@@ -15,6 +15,7 @@ async function main() {
   async function trampolineEmptyTestSettlement() {
     const emptySettlement = "0x";
     const nonce = await solverTrampoline.nonces(solver.address);
+    const deadline = ethers.constants.MaxUint256;
     const signature = await solver._signTypedData(
       {
         chainId,
@@ -24,16 +25,18 @@ async function main() {
         Settlement: [
           { name: "settlement", type: "bytes" },
           { name: "nonce", type: "uint256" },
+          { name: "deadline", type: "uint256" },
         ],
       },
       {
         settlement: emptySettlement,
         nonce,
+        deadline,
       },
     );
 
-    const { r, s, v } = await ethers.utils.splitSignature(signature);
-    return await solverTrampoline.settle(emptySettlement, nonce, r, s, v);
+    const { v, r, s } = await ethers.utils.splitSignature(signature);
+    return await solverTrampoline.settle(emptySettlement, nonce, deadline, v, r, s);
   }
 
   // Ensure that the solver already has executed a trampolined settlement in

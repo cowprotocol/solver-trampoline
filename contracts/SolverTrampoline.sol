@@ -26,8 +26,11 @@ contract SolverTrampoline {
     /// @dev Error indicating that the signer of a settlement is not an
     /// authorized solver.
     error Unauthorized(address solver);
-    /// @dev Error that the specified nonce is not valid for the signer.
+    /// @dev Error indicating that the specified nonce is not valid for the
+    /// recovered signer.
     error InvalidNonce();
+    /// @dev Error indicating that the block deadline has past.
+    error Expired(uint256 deadline, uint256 block);
 
     constructor(Settlement settlementContract_) {
         settlementContract = settlementContract_;
@@ -41,8 +44,8 @@ contract SolverTrampoline {
     }
 
     /// @dev Executes a settlement on behalf of a solver.
-    function settle(bytes calldata settlement, uint256 nonce, bytes32 r, bytes32 s, uint8 v) external {
-        bytes32 messageDigest = settlementMessage(settlement, nonce);
+    function settle(bytes calldata settlement, uint256 nonce, uint256 deadline, uint8 v, bytes32 r, bytes32 s) external {
+        bytes32 messageDigest = settlementMessage(settlement, nonce, deadline);
         address solver = ecrecover(messageDigest, v, r, s);
         if (solver == address(0) || !solverAuthenticator.isSolver(solver)) {
             revert Unauthorized(solver);
@@ -52,6 +55,10 @@ contract SolverTrampoline {
             revert InvalidNonce();
         }
         nonces[solver] = nonce + 1;
+
+        if (deadline < block.number) {
+            revert Expired(deadline, block.number);
+        }
 
         // Use a low-level `call` instead of calling `settle` directly. This is
         // for a couple reasons:
@@ -73,15 +80,16 @@ contract SolverTrampoline {
     }
 
     /// @dev Returns the EIP-712 signing digest for the specified settlement
-    /// hash and nonce.
-    function settlementMessage(bytes calldata settlement, uint256 nonce) public view returns (bytes32) {
+    /// hash, nonce, and block deadline.
+    function settlementMessage(bytes calldata settlement, uint256 nonce, uint256 deadline) public view returns (bytes32) {
         return keccak256(abi.encodePacked(
             hex"1901",
             domainSeparator,
             keccak256(abi.encode(
-                keccak256("Settlement(bytes settlement,uint256 nonce)"),
+                keccak256("Settlement(bytes settlement,uint256 nonce,uint256 deadline)"),
                 keccak256(settlement),
-                nonce
+                nonce,
+                deadline
             ))
         ));
     }

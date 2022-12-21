@@ -30,12 +30,13 @@ describe("SolverTrampoline", function () {
     async function signTestSettlement(
       signer: Signer,
       nonce: BigNumberish,
+      deadline: BigNumberish,
       options?: { shouldRevert: boolean },
     ): Promise<{
       settlement: BytesLike;
+      v: BigNumberish;
       r: BytesLike;
       s: BytesLike;
-      v: BigNumberish;
     }> {
       const { shouldRevert } = options ?? { shouldRevert: false };
       const settlement = TestSettlement.interface.encodeFunctionData(
@@ -46,7 +47,7 @@ describe("SolverTrampoline", function () {
       const signature = await (signer as any)._signTypedData(
         domain,
         EIP712_TYPES,
-        { settlement, nonce },
+        { settlement, nonce, deadline },
       );
 
       return {
@@ -75,8 +76,11 @@ describe("SolverTrampoline", function () {
     });
 
     it("Should set CoW Protocol contract addresses", async function () {
-      const { settlementContract, solverAuthenticator, solverTrampoline } =
-        await loadFixture(fixture);
+      const {
+        settlementContract,
+        solverAuthenticator,
+        solverTrampoline,
+      } = await loadFixture(fixture);
 
       expect(await solverTrampoline.settlementContract())
         .to.equal(settlementContract.address);
@@ -87,18 +91,18 @@ describe("SolverTrampoline", function () {
 
   describe("settle", function () {
     it("Should execute a settlement and increment nonce", async function () {
-      const { solverTrampoline, signTestSettlement, solver } =
-        await loadFixture(fixture);
+      const { solverTrampoline, signTestSettlement, solver } = await loadFixture(fixture);
 
       const nonce = await solverTrampoline.nonces(solver.address);
+      const deadline = await ethers.provider.getBlockNumber() + 1;
       const {
         settlement,
+        v,
         r,
         s,
-        v,
-      } = await signTestSettlement(solver, nonce);
+      } = await signTestSettlement(solver, nonce, deadline);
 
-      await expect(solverTrampoline.settle(settlement, nonce, r, s, v))
+      await expect(solverTrampoline.settle(settlement, nonce, deadline, v, r, s))
         .to.emit(solverTrampoline, "TrampolinedSettlement")
         .withArgs(solver.address, nonce);
       expect(await solverTrampoline.nonces(solver.address))
@@ -106,84 +110,100 @@ describe("SolverTrampoline", function () {
     });
 
     it("Allows executing any settlement contract function", async function () {
-      const {
-        solverTrampoline,
-        domain,
-        solver,
-      } = await loadFixture(fixture);
+      const { solverTrampoline, domain, solver } = await loadFixture(fixture);
 
       // Try an execute any function, like the fallback function.
       const fallback = "0x";
 
       const nonce = await solverTrampoline.nonces(solver.address);
+      const deadline = ethers.constants.MaxUint256;
       const signature = await solver._signTypedData(
         domain,
         EIP712_TYPES,
-        { settlement: fallback, nonce },
+        { settlement: fallback, nonce, deadline },
       );
 
       const { r, s, v } = ethers.utils.splitSignature(signature);
-      await expect(solverTrampoline.settle(fallback, nonce, r, s, v))
+      await expect(solverTrampoline.settle(fallback, nonce, deadline, v, r, s))
         .to.not.be.reverted;
     });
 
     it("Should propagate settlement reverts", async function () {
-      const { solverTrampoline, signTestSettlement, solver } =
-        await loadFixture(fixture);
+      const { solverTrampoline, signTestSettlement, solver } = await loadFixture(fixture);
 
       const nonce = await solverTrampoline.nonces(solver.address);
+      const deadline = ethers.constants.MaxUint256;
       const {
         settlement,
+        v,
         r,
         s,
-        v,
-      } = await signTestSettlement(solver, nonce, { shouldRevert: true });
+      } = await signTestSettlement(solver, nonce, deadline, {
+        shouldRevert: true,
+      });
 
-      await expect(solverTrampoline.settle(settlement, nonce, r, s, v))
+      await expect(solverTrampoline.settle(settlement, nonce, deadline, v, r, s))
         .to.be.revertedWith("test settlement reverted");
     });
 
     it("Should deny settlements with invalid signatures", async function () {
       const { solverTrampoline } = await loadFixture(fixture);
 
-      const { r, s, v } = INVALID_SIGNATURE;
-      await expect(solverTrampoline.settle("0x", 0, r, s, v))
+      const { v, r, s } = INVALID_SIGNATURE;
+      await expect(solverTrampoline.settle("0x", 0, 0, v, r, s))
         .to.be.revertedWithCustomError(solverTrampoline, "Unauthorized")
         .withArgs(ethers.constants.AddressZero);
     });
 
     it("Should deny settlements signed unauthorized solvers", async function () {
-      const { solverTrampoline, signTestSettlement, notSolver } =
-        await loadFixture(fixture);
+      const { solverTrampoline, signTestSettlement, notSolver } = await loadFixture(fixture);
 
       const nonce = await solverTrampoline.nonces(notSolver.address);
+      const deadline = ethers.constants.MaxUint256;
       const {
         settlement,
+        v,
         r,
         s,
-        v,
-      } = await signTestSettlement(notSolver, nonce);
+      } = await signTestSettlement(notSolver, nonce, deadline);
 
-      await expect(solverTrampoline.settle(settlement, nonce, r, s, v))
+      await expect(solverTrampoline.settle(settlement, nonce, deadline, v, r, s))
         .to.be.revertedWithCustomError(solverTrampoline, "Unauthorized")
         .withArgs(notSolver.address);
     });
 
     it("Should deny settlements with incorrect nonces", async function () {
-      const { solverTrampoline, signTestSettlement, solver } =
-        await loadFixture(fixture);
+      const { solverTrampoline, signTestSettlement, solver } = await loadFixture(fixture);
 
       const nonce = await solverTrampoline.nonces(solver.address);
       const wrongNonce = nonce.add(1);
+      const deadline = ethers.constants.MaxUint256;
       const {
         settlement,
+        v,
         r,
         s,
-        v,
-      } = await signTestSettlement(solver, wrongNonce);
+      } = await signTestSettlement(solver, wrongNonce, deadline);
 
-      await expect(solverTrampoline.settle(settlement, wrongNonce, r, s, v))
+      await expect(solverTrampoline.settle(settlement, wrongNonce, deadline, v, r, s))
         .to.be.revertedWithCustomError(solverTrampoline, "InvalidNonce");
+    });
+
+    it("Should deny expired settlements", async function () {
+      const { solverTrampoline, signTestSettlement, solver } = await loadFixture(fixture);
+
+      const nonce = await solverTrampoline.nonces(solver.address);
+      const deadline = await ethers.provider.getBlockNumber();
+      const {
+        settlement,
+        v,
+        r,
+        s,
+      } = await signTestSettlement(solver, nonce, deadline);
+
+      await expect(solverTrampoline.settle(settlement, nonce, deadline, v, r, s))
+        .to.be.revertedWithCustomError(solverTrampoline, "Expired")
+        .withArgs(deadline, deadline + 1);
     });
   });
 
@@ -199,12 +219,14 @@ describe("SolverTrampoline", function () {
       const { solverTrampoline, domain } = await loadFixture(fixture);
       const settlement = "0x01020304";
       const nonce = 42;
+      const deadline = 1337;
 
-      expect(await solverTrampoline.settlementMessage(settlement, nonce))
+      expect(await solverTrampoline.settlementMessage(settlement, nonce, deadline))
         .to.equal(
           ethers.utils._TypedDataEncoder.hash(domain, EIP712_TYPES, {
             settlement,
             nonce,
+            deadline,
           }),
         );
     });
@@ -215,6 +237,7 @@ const EIP712_TYPES = {
   Settlement: [
     { name: "settlement", type: "bytes" },
     { name: "nonce", type: "uint256" },
+    { name: "deadline", type: "uint256" },
   ],
 };
 
@@ -222,7 +245,7 @@ const EIP712_TYPES = {
 // considered to be "incorrect" input and causes the pre-compile to fail, which
 // translates to `ecrecover` returning the 0-address in Solidity.
 const INVALID_SIGNATURE = {
+  v: 42,
   r: ethers.constants.HashZero,
   s: ethers.constants.HashZero,
-  v: 42,
 };
