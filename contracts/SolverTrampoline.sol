@@ -30,7 +30,7 @@ contract SolverTrampoline {
     /// recovered signer.
     error InvalidNonce();
     /// @dev Error indicating that the block deadline has past.
-    error Expired();
+    error Expired(uint256 deadline, uint256 block);
 
     constructor(Settlement settlementContract_) {
         settlementContract = settlementContract_;
@@ -56,8 +56,8 @@ contract SolverTrampoline {
         }
         nonces[solver] = nonce + 1;
 
-        if (block.number > deadline) {
-            revert Expired();
+        if (deadline < block.number) {
+            revert Expired(deadline, block.number);
         }
 
         // Use a low-level `call` instead of calling `settle` directly. This is
