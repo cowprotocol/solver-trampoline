@@ -138,9 +138,7 @@ describe("SolverTrampoline", function () {
         v,
         r,
         s,
-      } = await signTestSettlement(solver, nonce, deadline, {
-        shouldRevert: true,
-      });
+      } = await signTestSettlement(solver, nonce, deadline, { shouldRevert: true });
 
       await expect(solverTrampoline.settle(settlement, nonce, deadline, v, r, s))
         .to.be.revertedWith("test settlement reverted");
@@ -204,6 +202,61 @@ describe("SolverTrampoline", function () {
       await expect(solverTrampoline.settle(settlement, nonce, deadline, v, r, s))
         .to.be.revertedWithCustomError(solverTrampoline, "Expired")
         .withArgs(deadline, deadline + 1);
+    });
+  });
+
+  describe("cancelCurrentNonce", function () {
+    it("Should increment the caller's nonce and return the cancelled value", async function () {
+      const { solverTrampoline, solver } = await loadFixture(fixture);
+
+      expect(await solverTrampoline.nonces(solver.address))
+        .to.equal(0);
+      expect(
+        await solverTrampoline
+          .connect(solver)
+          .callStatic
+          .cancelCurrentNonce(),
+      ).to.equal(0);
+      await expect(solverTrampoline.connect(solver).cancelCurrentNonce())
+        .to.not.be.reverted;
+
+      expect(await solverTrampoline.nonces(solver.address))
+        .to.equal(1);
+      expect(
+        await solverTrampoline
+          .connect(solver)
+          .callStatic
+          .cancelCurrentNonce(),
+      ).to.equal(1);
+      await expect(solverTrampoline.connect(solver).cancelCurrentNonce())
+        .to.not.be.reverted;
+
+      expect(await solverTrampoline.nonces(solver.address))
+        .to.equal(2);
+    });
+
+    it("Should prevent signed settlements from executing", async function () {
+      const {
+        solverTrampoline,
+        signTestSettlement,
+        solver,
+      } = await loadFixture(fixture);
+
+      const nonce = await solverTrampoline.nonces(solver.address);
+      const deadline = ethers.constants.MaxUint256;
+      const {
+        settlement,
+        r,
+        s,
+        v,
+      } = await signTestSettlement(solver, nonce, deadline);
+
+      expect(solverTrampoline.callStatic.settle(settlement, nonce, deadline, v, r, s))
+        .to.eventually.be.fulfilled;
+
+      await solverTrampoline.connect(solver).cancelCurrentNonce();
+      expect(solverTrampoline.callStatic.settle(settlement, nonce, deadline, v, r, s))
+        .to.eventually.be.rejected;
     });
   });
 

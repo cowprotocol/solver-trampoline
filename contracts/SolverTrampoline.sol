@@ -79,6 +79,11 @@ contract SolverTrampoline {
         emit TrampolinedSettlement(solver, nonce);
     }
 
+    /// @dev Cancels the current nonce for the caller, returning its value.
+    function cancelCurrentNonce() external returns (uint256) {
+        return nonces[msg.sender]++;
+    }
+
     /// @dev Returns the EIP-712 signing digest for the specified settlement
     /// hash, nonce, and block deadline.
     function settlementMessage(bytes calldata settlement, uint256 nonce, uint256 deadline) public view returns (bytes32) {
