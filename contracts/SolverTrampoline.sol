@@ -25,7 +25,7 @@ contract SolverTrampoline {
     error Unauthorized(address solver);
     /// @dev Error indicating that the specified nonce is not valid for the
     /// recovered signer.
-    error InvalidNonce();
+    error InvalidNonce(uint256 nonce, uint256 current);
     /// @dev Error indicating that the block deadline has past.
     error Expired(uint256 deadline, uint256 block);
 
@@ -42,8 +42,9 @@ contract SolverTrampoline {
             revert Unauthorized(solver);
         }
 
-        if (nonce != nonces[solver]) {
-            revert InvalidNonce();
+        uint256 currentNonce = nonces[solver];
+        if (nonce != currentNonce) {
+            revert InvalidNonce(nonce, currentNonce);
         }
         nonces[solver] = nonce + 1;
 
