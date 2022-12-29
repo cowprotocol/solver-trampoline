@@ -14,9 +14,6 @@ contract SolverTrampoline {
     /// @dev the CoW Protocol solver authenticator.
     Authentication public immutable solverAuthenticator;
 
-    /// @dev The domain separator for signing EIP-712 settlements.
-    bytes32 public immutable domainSeparator;
-
     /// @dev Nonce by solver address.
     mapping(address => uint256) public nonces;
 
@@ -35,12 +32,6 @@ contract SolverTrampoline {
     constructor(Settlement settlementContract_) {
         settlementContract = settlementContract_;
         solverAuthenticator = settlementContract_.authenticator();
-
-        domainSeparator = keccak256(abi.encode(
-            keccak256("EIP712Domain(uint256 chainId,address verifyingContract)"),
-            block.chainid,
-            address(this)
-        ));
     }
 
     /// @dev Executes a settlement on behalf of a solver.
@@ -85,12 +76,21 @@ contract SolverTrampoline {
         return nonces[msg.sender]++;
     }
 
+    /// @dev The domain separator for signing EIP-712 settlements.
+    function domainSeparator() public view returns (bytes32) {
+        return keccak256(abi.encode(
+            keccak256("EIP712Domain(uint256 chainId,address verifyingContract)"),
+            block.chainid,
+            address(this)
+        ));
+    }
+
     /// @dev Returns the EIP-712 signing digest for the specified settlement
     /// hash, nonce, and block deadline.
     function settlementMessage(bytes calldata settlement, uint256 nonce, uint256 deadline) public view returns (bytes32) {
         return keccak256(abi.encodePacked(
             hex"1901",
-            domainSeparator,
+            domainSeparator(),
             keccak256(abi.encode(
                 keccak256("Settlement(bytes settlement,uint256 nonce,uint256 deadline)"),
                 keccak256(settlement),
